@@ -3,15 +3,16 @@ use serde_json::json;
 use tokio_tungstenite::connect_async;
 use url::Url;
 use reqwest::Client;
-use std::time::Duration;
+use log::{info, error};
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
+
     let ws_url = "wss://eth.llamarpc.com";
     let url = Url::parse(ws_url).unwrap();
-    let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
-    println!("✅ Connected to {}", ws_url);
+    let (ws_stream, _) = connect_async(url).await.expect("❌ Failed to connect");
+    info!("✅ Connected to {}", ws_url);
 
     let (mut write, mut read) = ws_stream.split();
 
@@ -23,7 +24,7 @@ async fn main() {
     .to_string();
 
     write.send(tokio_tungstenite::tungstenite::Message::Text(subscribe_msg)).await.unwrap();
-    println!("🔄 Subscribed to pending transactions...");
+    info!("🔄 Subscribed to pending transactions...");
 
     let client = Client::new();
 
@@ -33,9 +34,7 @@ async fn main() {
                 if let Some(params) = parsed.get("params") {
                     if let Some(result) = params.get("result") {
                         if let Some(tx_hash) = result.as_str() {
-                            println!("📥 New pending tx hash: {}", tx_hash);
-
-                            // Llamar a la función para obtener detalles
+                            info!("📥 New pending tx hash: {}", tx_hash);
                             fetch_tx_details(&client, tx_hash).await;
                         }
                     }
@@ -54,21 +53,27 @@ async fn fetch_tx_details(client: &Client, tx_hash: &str) {
         "params": [tx_hash]
     });
 
-    if let Ok(resp) = client.post(rpc_url).json(&payload).send().await {
-        if let Ok(resp_json) = resp.json::<serde_json::Value>().await {
-            if let Some(result) = resp_json.get("result") {
-                let from = result.get("from").and_then(|v| v.as_str()).unwrap_or("N/A");
-                let to = result.get("to").and_then(|v| v.as_str()).unwrap_or("N/A");
-                let value_hex = result.get("value").and_then(|v| v.as_str()).unwrap_or("0x0");
-                let input = result.get("input").and_then(|v| v.as_str()).unwrap_or("");
+    match client.post(rpc_url).json(&payload).send().await {
+        Ok(resp) => {
+            match resp.json::<serde_json::Value>().await {
+                Ok(resp_json) => {
+                    if let Some(result) = resp_json.get("result") {
+                        let from = result.get("from").and_then(|v| v.as_str()).unwrap_or("N/A");
+                        let to = result.get("to").and_then(|v| v.as_str()).unwrap_or("N/A");
+                        let value_hex = result.get("value").and_then(|v| v.as_str()).unwrap_or("0x0");
+                        let input = result.get("input").and_then(|v| v.as_str()).unwrap_or("");
 
-                println!("🔹 From: {}", from);
-                println!("🔹 To: {}", to);
-                println!("🔹 Value: {}", hex_to_eth(value_hex));
-                println!("🔹 Input (first 10): {}", &input[..10.min(input.len())]);
-                println!("----------------------------------------");
+                        info!("🔹 From: {}", from);
+                        info!("🔹 To: {}", to);
+                        info!("🔹 Value: {}", hex_to_eth(value_hex));
+                        info!("🔹 Input (first 10): {}", &input[..10.min(input.len())]);
+                        info!("----------------------------------------");
+                    }
+                }
+                Err(e) => error!("❌ Error parsing JSON response: {}", e),
             }
         }
+        Err(e) => error!("❌ Error sending RPC request: {}", e),
     }
 }
 
@@ -79,4 +84,4 @@ fn hex_to_eth(hex: &str) -> String {
     } else {
         "0 ETH".to_string()
     }
-            }
+}
