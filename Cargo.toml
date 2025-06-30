@@ -1,0 +1,15 @@
+package]
+name = "rust-mempool-sniffer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+websocket = "0.26.2"
+hex = "0.4"
+log = "0.4"
+env_logger = "0.10"
+
+(ajústalo si usas otra lib de websockets como tokio-tungstenite para mayor estabilidad)
